@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>SKYSTRIKE - Air Combat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="game-shell">
+    <div id="viewport"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">✦</span>
+        <div>
+          <b>SKYSTRIKE</b>
+          <small>3D AIR COMBAT</small>
+        </div>
+      </div>
+      <button id="settings-open" class="icon-btn">⚙ 설정</button>
+    </header>
+
+    <section class="hud">
+      <div class="hud-left">
+        <div class="hud-card">
+          <small>ALTITUDE</small>
+          <strong id="altitude">2400</strong><em>FT</em>
+        </div>
+        <div class="hud-card">
+          <small>AIR SPEED</small>
+          <strong id="speed">420</strong><em>KT</em>
+        </div>
+        <div class="hud-card">
+          <small>HEADING</small>
+          <strong id="heading">000</strong><em>°</em>
+        </div>
+      </div>
+
+      <div class="target-box">
+        <span>TARGET TRACKING</span>
+        <b id="target-status">SEARCHING...</b>
+        <div class="target-line"><i id="target-progress"></i></div>
+      </div>
+
+      <div class="hud-right">
+        <div class="weapon">
+          <span>WEAPON SYSTEM</span>
+          <b>GUN <i>● READY</i></b>
+          <small>AMMO <strong id="ammo">240</strong></small>
+        </div>
+        <div class="health">
+          <span>HULL INTEGRITY</span>
+          <div class="health-track"><i id="health-bar"></i></div>
+          <b id="health-text">100%</b>
+        </div>
+      </div>
+
+      <div id="reticle">
+        <span class="tl"></span><span class="tr"></span>
+        <span class="bl"></span><span class="br"></span>
+        <i></i>
+      </div>
+      <div class="hit-flash" id="hit-flash"></div>
+    </section>
+
+    <div class="mission-toast" id="mission-toast">
+      <b>MISSION 01</b>
+      <span>ENEMY AIRCRAFT DETECTED</span>
+    </div>
+
+    <div class="bottom-hud">
+      <span id="view-label">EXTERNAL VIEW · F3</span>
+      <span>FLIGHT SYSTEMS <b>NOMINAL</b></span>
+      <span id="control-label">KEYBOARD</span>
+    </div>
+
+    <section class="start-screen" id="start-screen">
+      <div class="eyebrow">AIR SUPERIORITY // TRAINING ZONE</div>
+      <h1>OWN THE<br><span>SKY.</span></h1>
+      <p>적기를 추적하고, 조준하고, 격추하라.</p>
+      <div class="start-details">
+        <span>3D COMBAT</span>
+        <span>AI ENEMIES</span>
+        <span>FREE FLIGHT</span>
+      </div>
+      <button id="start-btn" class="primary-btn">출격하기 →</button>
+      <small>PC: WASD / 방향키 · SPACE 사격 · F3 시점 변경</small>
+    </section>
+
+    <div class="mobile-controls" id="mobile-controls">
+      <div class="move-pad">
+        <button data-move="left">◀</button>
+        <div>
+          <button data-move="up">▲</button>
+          <button data-move="down">▼</button>
+        </div>
+        <button data-move="right">▶</button>
+      </div>
+      <div class="action-pad">
+        <button id="mobile-view">시점 전환</button>
+        <button id="mobile-fire" class="fire-btn">FIRE</button>
+      </div>
+    </div>
+
+    <div class="settings-overlay" id="settings-overlay">
+      <section class="settings-panel">
+        <div class="settings-head">
+          <div><small>FLIGHT SYSTEMS</small><h2>게임 설정</h2></div>
+          <button id="settings-close" class="icon-btn">✕</button>
+        </div>
+
+        <label class="setting-row">
+          <span><b>플레이 기기</b><small>조작 방식</small></span>
+          <select id="device-mode">
+            <option value="auto">자동 감지</option>
+            <option value="pc">컴퓨터</option>
+            <option value="mobile">모바일</option>
+          </select>
+        </label>
+
+        <label class="setting-row">
+          <span><b>카메라 시점</b><small>조종석 / 외부 추적</small></span>
+          <select id="camera-mode">
+            <option value="third">3인칭</option>
+            <option value="first">1인칭</option>
+          </select>
+        </label>
+
+        <label class="setting-row">
+          <span><b>난이도</b><small>적기 속도와 내구도</small></span>
+          <select id="difficulty">
+            <option value="easy">훈련</option>
+            <option value="normal" selected>표준</option>
+            <option value="hard">에이스</option>
+          </select>
+        </label>
+
+        <label class="setting-row">
+          <span><b>화면 흔들림</b><small>폭발과 피격 효과</small></span>
+          <select id="shake-mode">
+            <option value="on">켜기</option>
+            <option value="off">끄기</option>
+          </select>
+        </label>
+
+        <p class="settings-note">
+          좌우 선회 시 기체가 실제 전투기처럼 기울어지는 롤링 효과가 적용됩니다.
+        </p>
+        <button id="apply-settings" class="primary-btn full">설정 적용</button>
+      </section>
+    </div>
+
+    <section class="game-over hidden" id="game-over">
+      <small>MISSION REPORT</small>
+      <h2 id="report-title">AIRCRAFT DESTROYED</h2>
+      <p id="report-stats"></p>
+      <button id="restart-btn" class="primary-btn">다시 출격 ↻</button>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
