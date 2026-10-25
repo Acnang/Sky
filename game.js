@@ -17,7 +17,7 @@ let boost=100,enemyLimit=5,maxParticles=65;
 
 const keys={},touch={left:false,right:false,up:false,down:false};
 const enemies=[],bullets=[],hostileBullets=[],particles=[],clouds=[],bannerRigs=[];
-const imageFiles=['1.jpg'];
+const imageFiles=['2.jpg'];
 
 const bodyGeo=new THREE.ConeGeometry(.65,10,8);
 bodyGeo.rotateX(-Math.PI/2);
