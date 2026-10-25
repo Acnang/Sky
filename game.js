@@ -61,25 +61,100 @@ function makeBannerTexture(image){
  else {ctx.fillStyle='#102438';ctx.font='bold 52px Arial';ctx.textAlign='center';ctx.fillText('SKYSTRIKE AIR SHOW',512,150);ctx.textAlign='left'}
  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;return texture;
 }
-function createBannerRigs(){
- const loader=new THREE.TextureLoader();let done=0;const images=[];
- imageFiles.forEach((file,i)=>loader.load('./'+file,t=>{images[i]=t.image;done++;if(done===imageFiles.length)buildBanners(images)},undefined,()=>{done++;if(done===imageFiles.length)buildBanners(images)}));
- // Always create fallback banners immediately; loaded images replace the banner textures when ready.
- buildBanners([]);
- function buildBanners(imgs){
-  if(bannerRigs.length)return;
-  for(let i=0;i<3;i++){
-   const rig=new THREE.Group(),left=makeBalloon([0xf2b84b,0x63c9dc,0xe97868][i]),right=makeBalloon([0x63c9dc,0xe97868,0xf2b84b][i]);
-   left.position.set(-19,4,0);right.position.set(19,4,0);rig.add(left,right);
-   const tex=makeBannerTexture(imgs[i%Math.max(1,imgs.length)]||null);
-   const banner=new THREE.Mesh(new THREE.PlaneGeometry(36,9),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
-   banner.position.set(0,-1,0);rig.add(banner);
-   const ropeMat=new THREE.LineBasicMaterial({color:0x493426});
-   for(const x of [-17,17]){const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(x,0,0),V(x,-1,0)]),ropeMat);rig.add(line)}
-   rig.position.set(rand(-650,650),rand(145,260),rand(-1200,250));rig.rotation.y=rand(-.3,.3);scene.add(rig);bannerRigs.push(rig);
+function createBannerRigs() {
+  const loader = new THREE.TextureLoader();
+  const images = new Array(imageFiles.length).fill(null);
+  let loadedCount = 0;
+
+  function buildBanners() {
+    if (bannerRigs.length > 0) return;
+
+    for (let i = 0; i < 3; i++) {
+      const rig = new THREE.Group();
+
+      const colors = [
+        0xf2b84b,
+        0x63c9dc,
+        0xe97868
+      ];
+
+      const left = makeBalloon(colors[i]);
+      const right = makeBalloon(colors[(i + 1) % 3]);
+
+      left.position.set(-19, 4, 0);
+      right.position.set(19, 4, 0);
+
+      rig.add(left, right);
+
+      // 이미지가 정상적으로 로드되면 사진을 표시하고,
+      // 로드에 실패하면 기본 문구를 표시한다.
+      const texture = makeBannerTexture(
+        images[i % images.length]
+      );
+
+      const banner = new THREE.Mesh(
+        new THREE.PlaneGeometry(36, 9),
+        new THREE.MeshBasicMaterial({
+          map: texture,
+          side: THREE.DoubleSide
+        })
+      );
+
+      banner.position.set(0, -1, 0);
+      rig.add(banner);
+
+      const ropeMaterial = new THREE.LineBasicMaterial({
+        color: 0x493426
+      });
+
+      for (const x of [-17, 17]) {
+        const rope = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([
+            V(x, 0, 0),
+            V(x, -1, 0)
+          ]),
+          ropeMaterial
+        );
+
+        rig.add(rope);
+      }
+
+      rig.position.set(
+        rand(-650, 650),
+        rand(145, 260),
+        rand(-1200, 250)
+      );
+
+      rig.rotation.y = rand(-0.3, 0.3);
+
+      scene.add(rig);
+      bannerRigs.push(rig);
+    }
   }
- }
-}
+
+  imageFiles.forEach((file, i) => {
+    loader.load(
+      './' + file,
+
+      // 이미지 로딩 성공
+      function (texture) {
+        images[i] = texture.image;
+        loadedCount++;
+
+        if (loadedCount === imageFiles.length) {
+          buildBanners();
+        }
+      },
+
+      undefined,
+
+      // 이미지 로딩 실패
+      function (error) {
+        console.error('현수막 이미지 로딩 실패:', file, error);
+        loadedCount++;
+
+        if (loadedCount === imageFiles.length) {
+          buildBanners();
 function spawnEnemy(initial=false){
  if(enemies.length>=enemyLimit||!player)return;
  const jet=makeJet(false),angle=rand(0,Math.PI*2),distance=initial?rand(300,450):rand(430,650);
