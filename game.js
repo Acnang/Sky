@@ -10,10 +10,14 @@ const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
 let scene,camera,renderer,clock,player,cockpit;
 let running=false,started=false,firstPerson=false;
 let difficulty='normal',quality='medium',deviceMode='auto';
-let health=100,ammo=300,kills=0,heading=0,pitch=0,roll=0;
+
+let health=100,maxHealth=100,ammo=300,kills=0;
+let level=1,bulletDamage=1,bulletScale=1,fireInterval=115;
+let heading=0,pitch=0,roll=0;
 let speed=420,time=0,spawnTimer=0,lastShot=0,shake=0,flash=0;
 let fireHeld=false,boostHeld=false,shakeEnabled=true,toastTimer;
 let boost=100,enemyLimit=5,maxParticles=65;
+let language=localStorage.getItem('skystrike-language') || 'ko';
 
 const keys={},touch={left:false,right:false,up:false,down:false};
 const enemies=[],bullets=[],hostileBullets=[],particles=[],clouds=[],bannerRigs=[];
@@ -32,7 +36,105 @@ wingGeo.computeVertexNormals();
 
 let playerMats,enemyMats;
 
+function tr(ko,en){
+ return language==='ko'?ko:en;
+}
+
+function setupLanguageUI(){
+ if(!$('language-box')){
+  const style=document.createElement('style');
+  style.textContent=`
+   #language-box{
+    position:fixed;top:12px;left:12px;z-index:9999;
+    color:white;background:rgba(10,25,40,.92);
+    padding:8px 10px;border:1px solid #63c9dc;
+    border-radius:8px;font:14px Arial,sans-serif
+   }
+   #language-select{
+    margin-left:8px;padding:5px;border-radius:5px;
+    background:#172632;color:white;border:1px solid #63c9dc
+   }
+   #upgrade-hud{
+    position:fixed;top:55px;left:12px;z-index:9998;
+    color:white;background:rgba(10,25,40,.88);
+    border:1px solid #63c9dc;border-radius:8px;
+    padding:9px 12px;font:bold 13px Arial,sans-serif;
+    line-height:1.8;pointer-events:none
+   }
+  `;
+  document.head.appendChild(style);
+
+  const box=document.createElement('div');
+  box.id='language-box';
+  box.innerHTML=`
+   <label for="language-select">언어 / Language</label>
+   <select id="language-select">
+    <option value="ko">한국어</option>
+    <option value="en">English</option>
+   </select>
+  `;
+  document.body.appendChild(box);
+
+  const hud=document.createElement('div');
+  hud.id='upgrade-hud';
+  document.body.appendChild(hud);
+
+  $('language-select').addEventListener('change',()=>{
+   language=$('language-select').value;
+   localStorage.setItem('skystrike-language',language);
+   updateLanguage();
+  });
+ }
+
+ $('language-select').value=language;
+ updateLanguage();
+}
+
+function updateLanguage(){
+ const label=document.querySelector('#language-box label');
+ if(label)label.textContent=tr('언어 / Language','Language / 언어');
+
+ const start=$('start');
+ const restart=$('restart');
+ const settings=$('open-settings');
+ const close=$('close-settings');
+ const apply=$('apply');
+
+ if(start)start.textContent=tr('게임 시작','START GAME');
+ if(restart)restart.textContent=tr('다시 시작','RESTART');
+ if(settings)settings.textContent=tr('설정','SETTINGS');
+ if(close)close.textContent=tr('닫기','CLOSE');
+ if(apply)apply.textContent=tr('적용','APPLY');
+
+ const controlLabel=$('control-label');
+ if(controlLabel){
+  const mobile=deviceMode==='mobile'||
+   (deviceMode==='auto'&&matchMedia('(pointer:coarse)').matches);
+  controlLabel.textContent=mobile
+   ?tr('터치 조작','TOUCH CONTROLS')
+   :tr('키보드 / 마우스','KEYBOARD / MOUSE');
+ }
+
+ updateUpgradeHUD();
+}
+
+function updateUpgradeHUD(){
+ const hud=$('upgrade-hud');
+ if(!hud)return;
+
+ hud.innerHTML=`
+  ${tr('레벨','LEVEL')}: ${level}<br>
+  ${tr('격추','KILLS')}: ${kills}<br>
+  ${tr('체력','HEALTH')}: ${health} / ${maxHealth}<br>
+  ${tr('탄약','AMMO')}: ${ammo}<br>
+  ${tr('공격력','DAMAGE')}: ${bulletDamage}<br>
+  ${tr('발사 속도','FIRE RATE')}: ${(1000/fireInterval).toFixed(1)} ${tr('발/초','shots/sec')}
+ `;
+}
+
 function init(){
+ setupLanguageUI();
+
  scene=new THREE.Scene();
  scene.background=new THREE.Color(0x87b7d0);
  scene.fog=new THREE.Fog(0x87b7d0,600,2600);
@@ -79,6 +181,7 @@ function init(){
  bindEvents();
  applyQuality();
  updateDevice();
+ updateLanguage();
  animate();
 }
 
@@ -177,12 +280,10 @@ function makeBannerTexture(image){
  ctx.lineWidth=12;
  ctx.strokeRect(6,6,1012,244);
 
- if(image && image.width && image.height){
-  const iw=image.width;
-  const ih=image.height;
-  const scale=Math.max(1000/iw,232/ih);
-  const w=iw*scale;
-  const h=ih*scale;
+ if(image&&image.width&&image.height){
+  const scale=Math.max(1000/image.width,232/image.height);
+  const w=image.width*scale;
+  const h=image.height*scale;
 
   ctx.save();
   ctx.beginPath();
@@ -195,7 +296,7 @@ function makeBannerTexture(image){
   ctx.fillRect(20,20,984,36);
   ctx.fillStyle='#102438';
   ctx.font='bold 22px Arial';
-  ctx.fillText('SKYSTRIKE  •  AIR SHOW',32,45);
+  ctx.fillText('SKYSTRIKE • AIR SHOW',32,45);
  }else{
   ctx.fillStyle='#102438';
   ctx.font='bold 52px Arial';
@@ -219,8 +320,8 @@ function createBannerRigs(){
 
   for(let i=0;i<3;i++){
    const rig=new THREE.Group();
-
    const colors=[0xf2b84b,0x63c9dc,0xe97868];
+
    const left=makeBalloon(colors[i]);
    const right=makeBalloon(colors[(i+1)%3]);
 
@@ -232,10 +333,7 @@ function createBannerRigs(){
 
    const banner=new THREE.Mesh(
     new THREE.PlaneGeometry(36,9),
-    new THREE.MeshBasicMaterial({
-     map:tex,
-     side:THREE.DoubleSide
-    })
+    new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide})
    );
 
    banner.position.set(0,-1,0);
@@ -245,10 +343,7 @@ function createBannerRigs(){
 
    for(const x of [-17,17]){
     const line=new THREE.Line(
-     new THREE.BufferGeometry().setFromPoints([
-      V(x,0,0),
-      V(x,-1,0)
-     ]),
+     new THREE.BufferGeometry().setFromPoints([V(x,0,0),V(x,-1,0)]),
      ropeMat
     );
     rig.add(line);
@@ -256,7 +351,6 @@ function createBannerRigs(){
 
    rig.position.set(rand(-650,650),rand(145,260),rand(-1200,250));
    rig.rotation.y=rand(-.3,.3);
-
    scene.add(rig);
    bannerRigs.push(rig);
   }
@@ -272,7 +366,7 @@ function createBannerRigs(){
    },
    undefined,
    error=>{
-    console.error('현수막 이미지 로딩 실패:',file,error);
+    console.error('Banner image failed to load:',file,error);
     finished++;
     if(finished===imageFiles.length)buildBanners();
    }
@@ -294,6 +388,7 @@ function spawnEnemy(initial=false){
  );
 
  jet.userData.hp=difficulty==='hard'?3:1;
+ jet.userData.maxHp=jet.userData.hp;
  jet.userData.fireClock=rand(2,5);
  jet.userData.turnRate=difficulty==='hard'?.7:.42;
  jet.userData.speed=difficulty==='hard'?48:34;
@@ -305,6 +400,7 @@ function spawnEnemy(initial=false){
 function fireBullet(origin,direction,hostile=false){
  const color=hostile?0xff4e37:0xafffff;
  const dir=direction.clone().normalize();
+ const size=hostile?1:bulletScale;
 
  const mesh=new THREE.Mesh(
   new THREE.CylinderGeometry(.12,.12,1,5),
@@ -312,7 +408,7 @@ function fireBullet(origin,direction,hostile=false){
  );
  mesh.position.copy(origin);
  mesh.quaternion.setFromUnitVectors(V(0,1,0),dir);
- mesh.scale.set(1,hostile?5:8,1);
+ mesh.scale.set(size,hostile?5:8,size);
  scene.add(mesh);
 
  const trail=new THREE.Mesh(
@@ -321,11 +417,12 @@ function fireBullet(origin,direction,hostile=false){
  );
  trail.position.copy(origin);
  trail.quaternion.copy(mesh.quaternion);
+ trail.scale.set(size,size,size);
  scene.add(trail);
 
  (hostile?hostileBullets:bullets).push({
   mesh,trail,previous:origin.clone(),
-  velocity:dir.multiplyScalar(hostile?155:390),
+  velocity:dir.multiplyScalar(hostile?155:390+(level-1)*15),
   life:hostile?3:2.2
  });
 }
@@ -334,7 +431,7 @@ function shoot(){
  if(!running||ammo<=0)return;
 
  const now=performance.now();
- if(now-lastShot<115)return;
+ if(now-lastShot<fireInterval)return;
 
  lastShot=now;
  ammo--;
@@ -343,9 +440,36 @@ function shoot(){
  const origin=player.position.clone().add(dir.clone().multiplyScalar(8));
 
  fireBullet(origin,dir,false);
- $('ammo').textContent=ammo;
 
- if(ammo===0)toast('AMMO DEPLETED','GUN SYSTEM EMPTY');
+ if($('ammo'))$('ammo').textContent=ammo;
+ updateUpgradeHUD();
+
+ if(ammo===0)toast(tr('탄약 소진','AMMO DEPLETED'),tr('무기 시스템 비활성','GUN SYSTEM EMPTY'));
+}
+
+function levelUp(){
+ level++;
+
+ // 레벨업마다 최대 체력 100 증가 및 완전 회복
+ maxHealth+=100;
+ health=maxHealth;
+
+ // 무기 강화
+ bulletDamage+=1;
+ bulletScale=Math.min(1+(level-1)*.15,3);
+ fireInterval=Math.max(45,115-(level-1)*7);
+
+ if($('health')){
+  $('health').textContent=health+' / '+maxHealth;
+  $('health-bar').style.width='100%';
+ }
+
+ updateUpgradeHUD();
+
+ toast(
+  tr(`레벨 ${level} 달성!`,`LEVEL ${level} REACHED!`),
+  tr('체력 및 무기 강화 완료','HEALTH AND WEAPONS UPGRADED')
+ );
 }
 
 function explode(pos,big=true){
@@ -381,11 +505,12 @@ function explode(pos,big=true){
 
  if(big){
   if(shakeEnabled)shake=.4;
-  toast('KILL CONFIRMED','ENEMY AIRCRAFT DESTROYED');
+  toast(tr('격추 성공','KILL CONFIRMED'),tr('적 항공기 파괴','ENEMY AIRCRAFT DESTROYED'));
  }
 }
 
 function toast(title,message){
+ if(!$('toast-title')||!$('toast-message')||!$('toast'))return;
  $('toast-title').textContent=title;
  $('toast-message').textContent=message;
  $('toast').classList.add('show');
@@ -425,8 +550,8 @@ function updatePlayer(dt){
 
  speed=boosting?680:420+Math.abs(turn)*18;
 
- $('boost-bar').style.width=boost+'%';
- $('boost-text').textContent=Math.round(boost)+'%';
+ if($('boost-bar'))$('boost-bar').style.width=boost+'%';
+ if($('boost-text'))$('boost-text').textContent=Math.round(boost)+'%';
 
  if(fireHeld||keys.Space||keys.Mouse0)shoot();
 }
@@ -461,10 +586,8 @@ function updateEnemies(dt){
 
   for(let j=0;j<enemies.length;j++){
    if(i===j)continue;
-
    const sep=e.position.clone().sub(enemies[j].position);
    const d=sep.length();
-
    if(d>0&&d<75)e.position.addScaledVector(sep.normalize(),dt*28);
   }
 
@@ -490,7 +613,6 @@ function updateEnemies(dt){
 function segmentDistance(point,a,b){
  const ab=b.clone().sub(a);
  const den=ab.lengthSq();
-
  if(!den)return point.distanceTo(a);
 
  const t=clamp(point.clone().sub(a).dot(ab)/den,0,1);
@@ -527,7 +649,7 @@ function updateBullets(dt){
      const e=enemies[j];
 
      if(segmentDistance(e.position,b.previous,b.mesh.position)<10){
-      e.userData.hp--;
+      e.userData.hp-=bulletDamage;
       explode(b.mesh.position,false);
       remove=true;
 
@@ -535,8 +657,12 @@ function updateBullets(dt){
        explode(e.position,true);
        scene.remove(e);
        enemies.splice(j,1);
+
        kills++;
-       $('kills').textContent=kills;
+       if($('kills'))$('kills').textContent=kills;
+
+       // 적 한 대를 격추할 때마다 레벨업
+       levelUp();
       }
       break;
      }
@@ -551,8 +677,12 @@ function updateBullets(dt){
     flash=.2;
     if(shakeEnabled)shake=.2;
 
-    $('health').textContent=health+'%';
-    $('health-bar').style.width=health+'%';
+    if($('health')){
+     $('health').textContent=health+' / '+maxHealth;
+     $('health-bar').style.width=clamp(health/maxHealth*100,0,100)+'%';
+    }
+
+    updateUpgradeHUD();
 
     if(health<=0)endGame();
    }
@@ -599,7 +729,6 @@ function updateCamera(dt){
 
   cockpit.position.copy(player.position);
   cockpit.quaternion.copy(player.quaternion);
-
   if(!cockpit.parent)scene.add(cockpit);
  }else{
   if(cockpit.parent)scene.remove(cockpit);
@@ -620,12 +749,14 @@ function updateCamera(dt){
 }
 
 function updateHUD(){
- $('alt').textContent=Math.round((player.position.y+80)*18+1200).toLocaleString('en-US');
- $('speed').textContent=Math.round(speed);
+ if($('alt'))$('alt').textContent=Math.round((player.position.y+80)*18+1200).toLocaleString('en-US');
+ if($('speed'))$('speed').textContent=Math.round(speed);
 
- $('heading').textContent=String(
-  Math.round(((heading*180/Math.PI)%360+360)%360)
- ).padStart(3,'0');
+ if($('heading')){
+  $('heading').textContent=String(
+   Math.round(((heading*180/Math.PI)%360+360)%360)
+  ).padStart(3,'0');
+ }
 
  let nearest=Infinity;
 
@@ -633,15 +764,25 @@ function updateHUD(){
   nearest=Math.min(nearest,e.position.distanceTo(player.position));
  }
 
- $('target-status').textContent=Number.isFinite(nearest)
-  ?'TARGET · '+Math.round(nearest)+' M'
-  :'NO TARGET';
+ if($('target-status')){
+  $('target-status').textContent=Number.isFinite(nearest)
+   ?tr('표적 · ','TARGET · ')+Math.round(nearest)+' M'
+   :tr('표적 없음','NO TARGET');
+ }
 
- $('target-bar').style.width=Number.isFinite(nearest)
-  ?clamp(100-nearest/7,5,100)+'%'
-  :'0%';
+ if($('target-bar')){
+  $('target-bar').style.width=Number.isFinite(nearest)
+   ?clamp(100-nearest/7,5,100)+'%'
+   :'0%';
+ }
 
- $('view-label').textContent=firstPerson?'1ST PERSON · F3':'3RD PERSON · F3';
+ if($('view-label')){
+  $('view-label').textContent=firstPerson
+   ?tr('1인칭 · F3','1ST PERSON · F3')
+   :tr('3인칭 · F3','3RD PERSON · F3');
+ }
+
+ updateUpgradeHUD();
 }
 
 function applyQuality(){
@@ -663,8 +804,14 @@ function updateDevice(){
  const mobile=deviceMode==='mobile'||
   (deviceMode==='auto'&&matchMedia('(pointer:coarse)').matches);
 
- $('mobile-controls').classList.toggle('active',mobile&&started);
- $('control-label').textContent=mobile?'TOUCH CONTROLS':'KEYBOARD / MOUSE';
+ if($('mobile-controls')){
+  $('mobile-controls').classList.toggle('active',mobile&&started);
+ }
+ if($('control-label')){
+  $('control-label').textContent=mobile
+   ?tr('터치 조작','TOUCH CONTROLS')
+   :tr('키보드 / 마우스','KEYBOARD / MOUSE');
+ }
 }
 
 function clearCombatObjects(){
@@ -693,13 +840,20 @@ function clearCombatObjects(){
 function startGame(){
  running=true;
  started=true;
+
  heading=pitch=roll=0;
  health=100;
+ maxHealth=100;
  ammo=300;
  kills=0;
+ level=1;
+ bulletDamage=1;
+ bulletScale=1;
+ fireInterval=115;
  boost=100;
  time=spawnTimer=0;
  shake=0;
+ lastShot=0;
 
  player.position.set(0,50,0);
  player.rotation.set(0,0,0);
@@ -708,24 +862,33 @@ function startGame(){
 
  for(let i=0;i<Math.min(4,enemyLimit);i++)spawnEnemy(true);
 
- $('ammo').textContent=ammo;
- $('kills').textContent='0';
- $('health').textContent='100%';
- $('health-bar').style.width='100%';
- $('boost-bar').style.width='100%';
- $('boost-text').textContent='100%';
+ if($('ammo'))$('ammo').textContent=ammo;
+ if($('kills'))$('kills').textContent='0';
+ if($('health'))$('health').textContent='100 / 100';
+ if($('health-bar'))$('health-bar').style.width='100%';
+ if($('boost-bar'))$('boost-bar').style.width='100%';
+ if($('boost-text'))$('boost-text').textContent='100%';
 
- $('start-screen').classList.add('hidden');
- $('game-over').classList.add('hidden');
+ if($('start-screen'))$('start-screen').classList.add('hidden');
+ if($('game-over'))$('game-over').classList.add('hidden');
 
  updateDevice();
- toast('MISSION 01','ENEMY AIRCRAFT DETECTED');
+ updateLanguage();
+ updateUpgradeHUD();
+
+ toast(tr('임무 01','MISSION 01'),tr('적 항공기 탐지','ENEMY AIRCRAFT DETECTED'));
 }
 
 function endGame(){
  running=false;
- $('report').textContent=`격추 ${kills}기 · 남은 탄약 ${ammo}발 · 내구도 ${health}%`;
- $('game-over').classList.remove('hidden');
+
+ if($('report')){
+  $('report').textContent=tr(
+   `레벨 ${level} · 격추 ${kills}기 · 남은 탄약 ${ammo}발 · 체력 ${health}/${maxHealth}`,
+   `Level ${level} · Kills ${kills} · Ammo ${ammo} · Health ${health}/${maxHealth}`
+  );
+ }
+ if($('game-over'))$('game-over').classList.remove('hidden');
 }
 
 function bindEvents(){
@@ -745,7 +908,7 @@ function bindEvents(){
   updateDevice();
 
   $('settings').classList.remove('open');
-  toast('SETTINGS UPDATED','CONFIGURATION APPLIED');
+  toast(tr('설정 변경 완료','SETTINGS UPDATED'),tr('설정이 적용되었습니다','CONFIGURATION APPLIED'));
  };
 
  $('mobile-view').onclick=()=>{
@@ -816,7 +979,6 @@ function bindEvents(){
  window.addEventListener('blur',()=>{
   fireHeld=false;
   boostHeld=false;
-
   Object.keys(keys).forEach(k=>keys[k]=false);
   Object.keys(touch).forEach(k=>touch[k]=false);
  });
@@ -848,7 +1010,9 @@ function animate(){
 
   if(flash>0){
    flash-=dt;
-   $('damage-flash').style.opacity=String(Math.max(0,flash*1.8));
+   if($('damage-flash')){
+    $('damage-flash').style.opacity=String(Math.max(0,flash*1.8));
+   }
   }
  }
 
